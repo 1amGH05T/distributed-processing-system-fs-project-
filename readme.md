@@ -1,171 +1,243 @@
+Below is a **concise, GitHub-ready, production-focused README**.
+It’s short, skimmable, and written the way **serious production repos** present themselves.
 
-# Distributed Task & Job Processing System
+**Stack:**
 
-A **production-ready distributed task and job processing system** built with a **queue-based, asynchronous architecture**.
-Designed for **scalability, reliability, and fault tolerance**, with independent workers and full job lifecycle tracking.
+* Frontend → **JavaScript (React + Vite)**
+* Backend → **Python (Django + DRF)**
+* Workers → Python
+* Queue → Redis
+* DB → PostgreSQL
+
+You can paste this directly into `README.md`.
 
 ---
 
-## Overview
+# Distributed Job Processing System
 
-This system decouples **job creation** from **job execution** using Redis-backed queues and stateless workers.
+Production-ready, **fault-tolerant, horizontally scalable** job processing system designed for **high throughput** and **real-world failure scenarios**.
 
-**High-level flow:**
+Supports **at-least-once delivery**, **idempotent jobs**, **retries**, **dead-letter queues**, and **stateless workers**.
+
+---
+
+## Architecture
 
 ```
-Client → API → Queue → Workers → Database
-```
-
-* Jobs are submitted via a REST API
-* Jobs are queued asynchronously
-* Workers process jobs independently
-* Job states are persisted and observable
-* Failures are retried or routed to a Dead Letter Queue (DLQ)
-
----
-
-## Features
-
-* Asynchronous background job processing
-* Horizontal scaling with multiple workers
-* Job retries with exponential backoff
-* Dead Letter Queue (DLQ) for failed jobs
-* Idempotent job execution
-* Persistent job state tracking
-* JWT-secured API
-* Structured logging & metrics
-* Fully Dockerized setup
-
----
-
-## Technology Stack
-
-### Frontend
-
-* React (Vite)
-* TypeScript
-* Axios
-* Tailwind CSS
-
-### Backend API
-
-* Node.js + TypeScript
-* Express
-* PostgreSQL
-* Prisma ORM
-* Redis
-* BullMQ
-* JWT Authentication
-* Zod (validation)
-
-### Workers
-
-* Node.js + TypeScript
-* BullMQ Workers
-* Graceful shutdown support
-
-### Infrastructure
-
-* Docker & Docker Compose
-* Environment-based configuration
-* Prometheus-ready metrics
-* Structured JSON logging
-
----
-
-## 📁 Project Structure
-
-```
-.
-├── frontend/      # Web UI & dashboard
-├── backend/       # REST API & job producer
-├── workers/       # Distributed job workers
-├── shared/        # Shared schemas & constants
-└── docker-compose.yml
+Client (JWT)
+   |
+   v
+Backend API (Python / Django REST)
+   |
+   |  Validate → Persist → Enqueue
+   v
+Redis Queue
+   |
+   v
+Workers (Python, stateless)
+   |
+   |  ACK / NACK / Retry / DLQ
+   v
+PostgreSQL
 ```
 
 ---
 
-## 🔄 Job Lifecycle
+## Tech Stack
+
+| Layer       | Technology                |
+| ----------- | ------------------------- |
+| Frontend    | JavaScript (React + Vite) |
+| Backend API | Python (Django + DRF)     |
+| Workers     | Python                    |
+| Queue       | Redis                     |
+| Database    | PostgreSQL                |
+| Auth        | JWT                       |
+| Containers  | Docker, Docker Compose    |
+| Logging     | Structured JSON           |
+| Metrics     | Prometheus-compatible     |
+
+---
+
+## Key Features
+
+* Asynchronous job execution
+* At-least-once delivery guarantees
+* Idempotent job processing
+* Priority & delayed jobs
+* Automatic retries with backoff
+* Dead-letter queue (DLQ)
+* Stateless, horizontally scalable workers
+* Secure JWT-protected API
+* Observability (logs, metrics, health checks)
+
+---
+
+## Repository Structure
 
 ```
-PENDING → PROCESSING → COMPLETED
-                 ↘
-                  FAILED → RETRY → DLQ
+task-system/
+├── frontend/          # React (Vite)
+├── backend/           # Django + DRF
+│   ├── api/
+│   ├── models/
+│   ├── services/
+│   └── settings.py
+├── workers/           # Python workers
+├── shared/            # Shared schemas & constants
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
-* Jobs are retried automatically
-* Poison jobs are isolated in DLQ
-* All states are persisted in the database
+---
+
+## Job Model
+
+Each job includes:
+
+* `id` (UUID)
+* `type`
+* `payload`
+* `priority`
+* `timeout_ms`
+* `max_attempts`
+* `attempts`
+* `status`
+* `idempotency_key`
+
+**Idempotency guarantee**
+
+```
+(job_type + idempotency_key) is unique
+```
+
+Duplicate submissions are safely ignored.
 
 ---
 
-## 🔌 API Endpoints
+## API
 
-* `POST /jobs` – submit a new job
-* `GET /jobs/:id` – fetch job status
-* `GET /jobs?status=` – list jobs
-* `GET /health` – service health check
+### Create Job
+
+```http
+POST /jobs
+Authorization: Bearer <JWT>
+```
+
+```json
+{
+  "type": "email.send",
+  "payload": { "to": "user@example.com" },
+  "priority": 5,
+  "timeout_ms": 10000,
+  "max_attempts": 5,
+  "idempotency_key": "uuid"
+}
+```
+
+### Get Job
+
+```http
+GET /jobs/{id}
+Authorization: Bearer <JWT>
+```
 
 ---
 
-## 🛡 Reliability Guarantees
+## Job Lifecycle
 
-* At-least-once delivery
-* Crash-safe worker recovery
-* Visibility timeouts
-* Bounded retries
-* Idempotent job handling
+```
+CREATED → QUEUED → RUNNING
+   ├─ SUCCESS → COMPLETED
+   ├─ FAILURE → RETRY
+   └─ MAX RETRIES → DEAD (DLQ)
+```
 
 ---
 
-## 🐳 Running Locally
+## Failure Handling
+
+* Worker crash → job is re-delivered
+* Timeout → retry with backoff
+* Retry exhaustion → DLQ
+* Poison jobs isolated
+* No infinite retry loops
+
+---
+
+## Workers
+
+* Stateless
+* Concurrent execution
+* Graceful shutdown
+* Explicit ACK / NACK
+* Heartbeats & backoff
+* Safe under duplicate delivery
+
+Workers **never expose HTTP endpoints**.
+
+---
+
+## Observability
+
+* Structured JSON logs (per job)
+* Metrics: queue depth, success, retries, DLQ
+* Health endpoints
+
+```http
+GET /health
+GET /metrics
+```
+
+---
+
+## Environment Variables
+
+`.env.example`
+
+```env
+DATABASE_URL=postgresql://user:pass@postgres:5432/jobs
+REDIS_URL=redis://redis:6379
+JWT_SECRET=replace_me
+WORKER_CONCURRENCY=10
+```
+
+---
+
+## Running Locally
 
 ```bash
 docker-compose up --build
 ```
 
-This starts:
+---
 
-* API server
-* Worker services
-* PostgreSQL
-* Redis
+## Scaling
+
+* Scale **API** and **workers** independently
+* Workers can be killed at any time without job loss
+* Redis should run in HA mode
+* PostgreSQL should be replicated
 
 ---
 
-## 📌 Status
+## Production Guarantees
 
-🚧 In active development
-✅ Architecture designed for real production workloads
-
----
-
-## 📄 License
-
-MIT License
-
-Copyright (c) 2026 1amGH05T
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
+✔ Stateless services
+✔ At-least-once delivery
+✔ Idempotent jobs
+✔ Dead-letter queue
+✔ Secure JWT auth
+✔ Observable & debuggable
 
 ---
 
+## License
 
+MIT
+
+---
+
+**Designed for real production systems — not demos.**
+Worker failure and duplicate delivery are expected and handled safely.
