@@ -1,18 +1,3 @@
-Below is a **concise, GitHub-ready, production-focused README**.
-It’s short, skimmable, and written the way **serious production repos** present themselves.
-
-**Stack:**
-
-* Frontend → **JavaScript (React + Vite)**
-* Backend → **Python (Django + DRF)**
-* Workers → Python
-* Queue → Redis
-* DB → PostgreSQL
-
-You can paste this directly into `README.md`.
-
----
-
 # Distributed Job Processing System
 
 Production-ready, **fault-tolerant, horizontally scalable** job processing system designed for **high throughput** and **real-world failure scenarios**.
