@@ -14,6 +14,15 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import dj_database_url
+from kombu import Queue
+
+CELERY_TASK_QUEUES = (
+    Queue("high"),
+    Queue("default"),
+    Queue("low"),
+)
+
+CELERY_TASK_DEFAULT_QUEUE = "default"
 
 load_dotenv()
 
@@ -28,15 +37,11 @@ DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
-CORS_ALLOW_ALL_ORIGINS = True # For development testing; adjust for production
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:5173", # Vite default port
-# ]
-
-CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_BACKEND = "redis://127.0.0.1:6379/1"
+CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",  # Vite dev server
+    # Add your production domain here, e.g: "https://yourdomain.com"
+]
 
 
 # Application definition
@@ -145,3 +150,9 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_TIMEZONE = "UTC"

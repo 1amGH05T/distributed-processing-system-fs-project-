@@ -1,4 +1,6 @@
-const BASE_URL = 'http://localhost:8000';
+// NOTE: For stronger XSS protection, consider migrating to HttpOnly cookies
+// instead of localStorage for token storage in a production environment.
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
@@ -104,4 +106,13 @@ export const checkAdmin = async () => {
     });
     if (!response.ok) throw new Error('Failed to check admin status');
     return response.json();
+};
+
+/**
+ * Centralized logout: clears stored tokens.
+ * Import and call this from any component to avoid duplicating logout logic.
+ */
+export const logout = () => {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
 };

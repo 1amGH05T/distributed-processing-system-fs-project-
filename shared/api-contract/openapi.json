@@ -1,0 +1,242 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "JobBox — Distributed Job Processing API",
+    "version": "1.0.0",
+    "description": "REST API for submitting, monitoring, and managing distributed background jobs."
+  },
+  "servers": [
+    { "url": "http://localhost:8000", "description": "Local development" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "JobStatus": {
+        "type": "string",
+        "enum": ["CREATED", "QUEUED", "RUNNING", "COMPLETED", "RETRY", "DEAD"]
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id":               { "type": "string", "format": "uuid" },
+          "type":             { "type": "string", "maxLength": 255 },
+          "payload":          { "type": "object" },
+          "priority":         { "type": "integer", "default": 0 },
+          "timeout_ms":       { "type": "integer", "default": 10000 },
+          "max_attempts":     { "type": "integer", "default": 3 },
+          "attempts":         { "type": "integer" },
+          "status":           { "$ref": "#/components/schemas/JobStatus" },
+          "result":           { "type": "object", "nullable": true },
+          "error":            { "type": "string", "nullable": true },
+          "idempotency_key":  { "type": "string", "maxLength": 255 },
+          "username":         { "type": "string" },
+          "created_at":       { "type": "string", "format": "date-time" },
+          "updated_at":       { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateJob": {
+        "type": "object",
+        "required": ["type", "idempotency_key"],
+        "properties": {
+          "type":             { "type": "string", "maxLength": 255, "example": "email.send" },
+          "payload":          { "type": "object", "default": {} },
+          "priority":         { "type": "integer", "default": 0, "minimum": 0, "maximum": 10 },
+          "max_attempts":     { "type": "integer", "default": 3, "minimum": 1, "maximum": 10 },
+          "idempotency_key":  { "type": "string", "maxLength": 255, "example": "user-42-welcome-email" }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id":       { "type": "integer" },
+          "username": { "type": "string" },
+          "email":    { "type": "string", "format": "email" }
+        }
+      },
+      "TokenPair": {
+        "type": "object",
+        "properties": {
+          "access":  { "type": "string", "description": "JWT access token" },
+          "refresh": { "type": "string", "description": "JWT refresh token" }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register a new user",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "email":    { "type": "string", "format": "email" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "User created successfully" },
+          "400": { "description": "Validation error (e.g. username taken)" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Obtain JWT token pair",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": { "type": "string" },
+                  "password": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/TokenPair" } }
+            }
+          },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/check-admin": {
+      "get": {
+        "tags": ["Auth"],
+        "summary": "Check if the current user is an admin",
+        "responses": {
+          "200": {
+            "description": "Admin status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "is_admin": { "type": "boolean" } }
+                }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/jobs": {
+      "get": {
+        "tags": ["Jobs"],
+        "summary": "List jobs. Admins see all; users see their own only.",
+        "responses": {
+          "200": {
+            "description": "List of jobs",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Job" } }
+              }
+            }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["Jobs"],
+        "summary": "Create a new job (idempotent on type + idempotency_key per user)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": { "schema": { "$ref": "#/components/schemas/CreateJob" } }
+          }
+        },
+        "responses": {
+          "201": { "description": "Job created and queued" },
+          "200": { "description": "Duplicate request — existing job returned (idempotent)" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "tags": ["Jobs"],
+        "summary": "Retrieve a single job",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Job detail", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Job" } } } },
+          "403": { "description": "Forbidden (not owner)" },
+          "404": { "description": "Not found" }
+        }
+      },
+      "delete": {
+        "tags": ["Jobs"],
+        "summary": "Delete a job",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "204": { "description": "Deleted" },
+          "403": { "description": "Forbidden" },
+          "404": { "description": "Not found" }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Users (Admin)"],
+        "summary": "List all users — admin only",
+        "responses": {
+          "200": {
+            "description": "List of users",
+            "content": {
+              "application/json": {
+                "schema": { "type": "array", "items": { "$ref": "#/components/schemas/User" } }
+              }
+            }
+          },
+          "403": { "description": "Forbidden — admin only" }
+        }
+      }
+    },
+    "/users/{id}": {
+      "delete": {
+        "tags": ["Users (Admin)"],
+        "summary": "Delete a user and all their jobs — admin only",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "204": { "description": "User deleted" },
+          "403": { "description": "Forbidden — admin only" },
+          "404": { "description": "Not found" }
+        }
+      }
+    }
+  }
+}

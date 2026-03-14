@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from django.contrib.auth.models import User
 from .models import Job
+from .tasks import execute_job
 from .serializers import JobSerializer, CreateJobSerializer, RegisterSerializer, UserSerializer
 
 class RegisterView(generics.CreateAPIView):
@@ -16,7 +17,7 @@ class JobListCreateView(generics.ListCreateAPIView):
         if user.is_staff:
             return Job.objects.all().order_by('-created_at')
         return Job.objects.filter(user=user).order_by('-created_at')
-    # permission_classes = [IsAuthenticated] # Assuming JWT is setup
+    permission_classes = [IsAuthenticated]
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -26,23 +27,32 @@ class JobListCreateView(generics.ListCreateAPIView):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # Idempotency check handled by unique constraint or here custom logic
+        # Idempotency check: get existing job or create a new one scoped to this user
         job, created = Job.objects.get_or_create(
             type=serializer.validated_data['type'],
             idempotency_key=serializer.validated_data['idempotency_key'],
-            user=self.request.user, # Ensure the correct user is checked
+            user=self.request.user,
             defaults=serializer.validated_data
         )
-        # If the job was not created, we want to update it if needed or just return it
-        # Assuming we just return the existing job for idempotency
+        if created:
+            job.status = "QUEUED"
+            job.save(update_fields=["status"])
+            
+            queue = "default"
+
+            if job.priority >= 8:
+                queue = "high"
+            elif job.priority <= 2:
+                queue = "low"
+
+            execute_job.apply_async(args=[str(job.id)], queue=queue)
+        # Return existing job as-is for idempotent requests
         response_serializer = JobSerializer(job)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
 class JobDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = JobSerializer
+    permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
         user = self.request.user

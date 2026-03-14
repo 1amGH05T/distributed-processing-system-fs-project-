@@ -1,41 +1,105 @@
 import React from 'react';
+import { Eye, CheckCircle, Clock, Play, RotateCw, XCircle } from 'lucide-react';
 
 const JobCard = ({ job }) => {
-    const getBadgeClass = (status) => {
+    const getProgress = (status) => {
+        if (status === 'COMPLETED') return 100;
+        if (status === 'RUNNING') return 60;
+        if (status === 'FAILED' || status === 'DEAD') return 0;
+        return 10; // QUEUED or CREATED
+    };
+
+    const getStatusContent = (status) => {
         switch (status) {
-            case 'CREATED': return 'badge-created';
-            case 'QUEUED': return 'badge-queued';
-            case 'RUNNING': return 'badge-running';
-            case 'COMPLETED': return 'badge-completed';
-            case 'RETRY': return 'badge-retry';
-            case 'DEAD': return 'badge-dead';
-            default: return 'badge-created';
+            case 'CREATED': 
+            case 'QUEUED':
+                return { 
+                    badgeClass: 'status-queued', 
+                    icon: <Clock className="w-3 h-3" />, 
+                    text: status,
+                    worker: 'Pending',
+                    workerStatus: 'Not assigned',
+                    actionIcon: <Play className="w-3.5 h-3.5" />
+                };
+            case 'RUNNING': 
+                return { 
+                    badgeClass: 'status-running', 
+                    icon: <span className="pulse-dot bg-green-400"></span>, 
+                    text: status,
+                    worker: `worker-${Math.floor(Math.random() * 10) + 1}`,
+                    workerStatus: 'Processing',
+                    actionIcon: <Eye className="w-3.5 h-3.5" />
+                };
+            case 'COMPLETED': 
+                return { 
+                    badgeClass: 'status-completed', 
+                    icon: <CheckCircle className="w-3 h-3" />, 
+                    text: status,
+                    worker: 'System',
+                    workerStatus: 'Finished',
+                    actionIcon: <Eye className="w-3.5 h-3.5" />
+                };
+            case 'RETRY':
+                return { 
+                    badgeClass: 'status-queued text-orange-400 bg-orange-500/10', 
+                    icon: <RotateCw className="w-3 h-3" />, 
+                    text: status,
+                    worker: 'System',
+                    workerStatus: `Attempt ${job.attempts}/${job.max_attempts}`,
+                    actionIcon: <Eye className="w-3.5 h-3.5" />
+                };
+            case 'DEAD': 
+            default:
+                return { 
+                    badgeClass: 'status-failed', 
+                    icon: <XCircle className="w-3 h-3" />, 
+                    text: status || 'FAILED',
+                    worker: 'System',
+                    workerStatus: 'Error occurred',
+                    actionIcon: <RotateCw className="w-3.5 h-3.5" />
+                };
         }
     };
 
+    const statusContent = getStatusContent(job.status);
+    const progress = getProgress(job.status);
+
     return (
-        <div className="glass-panel p-5 hover:-translate-y-1 transition-transform duration-300">
-            <div className="flex justify-between items-start mb-3">
-                <h3 className="font-semibold text-slate-200 truncate pr-2" title={job.type}>
+        <div className="job-row">
+            <div>
+                <div className="font-medium text-white mb-1 truncate pr-2" title={job.type}>
                     {job.type}
-                </h3>
-                <span className={`badge ${getBadgeClass(job.status)}`}>
-                    {job.status}
+                </div>
+                <div className="text-xs text-slate-400 font-mono">
+                    ID: {job.id.substring(0, 13)}...
+                </div>
+            </div>
+            <div>
+                <div className="text-xs text-slate-400 mb-2 flex justify-between">
+                    <span>Progress</span>
+                    <span>{progress}%</span>
+                </div>
+                <div className="progress-bar">
+                    <div className="progress-fill" style={{ width: `${progress}%` }}></div>
+                </div>
+            </div>
+            <div>
+                <span className={`status-badge ${statusContent.badgeClass}`}>
+                    {statusContent.icon} {statusContent.text}
                 </span>
             </div>
-
-            <div className="space-y-2 text-sm text-slate-400">
-                <div className="flex justify-between">
-                    <span>Priority:</span>
-                    <span className="text-slate-300">{job.priority}</span>
+            <div>
+                <div className="text-sm text-slate-300">
+                    {statusContent.worker}
                 </div>
-                <div className="flex justify-between">
-                    <span>Attempts:</span>
-                    <span className="text-slate-300">{job.attempts} / {job.max_attempts}</span>
+                <div className="text-xs text-slate-500">
+                    {statusContent.workerStatus}
                 </div>
-                <div className="text-xs truncate text-slate-500 mt-2" title={job.id}>
-                    ID: {job.id}
-                </div>
+            </div>
+            <div className="flex justify-center md:justify-end pr-2">
+                <button className="action-btn" title="View Details">
+                    {statusContent.actionIcon}
+                </button>
             </div>
         </div>
     );

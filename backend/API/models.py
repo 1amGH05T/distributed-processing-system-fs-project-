@@ -24,6 +24,8 @@ class Job(models.Model):
         choices=JobStatus.choices,
         default=JobStatus.CREATED
     )
+    result = models.JSONField(null=True, blank=True)
+    error = models.TextField(null=True, blank=True)
     idempotency_key = models.CharField(max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -31,7 +33,7 @@ class Job(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['type', 'idempotency_key'], 
+                fields=['user', 'type', 'idempotency_key'], 
                 name='unique_job_type_idempotency_key'
             )
         ]
