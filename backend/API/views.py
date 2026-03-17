@@ -1,7 +1,9 @@
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth.models import User
+from django.db import transaction
 from .models import Job
 from .tasks import execute_job
 from .serializers import JobSerializer, CreateJobSerializer, RegisterSerializer, UserSerializer
@@ -11,7 +13,14 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = (AllowAny,)
     serializer_class = RegisterSerializer
 
+class JobListCreatePagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
 class JobListCreateView(generics.ListCreateAPIView):
+    pagination_class = JobListCreatePagination
+
     def get_queryset(self):
         user = self.request.user
         if user.is_staff:
@@ -24,31 +33,47 @@ class JobListCreateView(generics.ListCreateAPIView):
             return CreateJobSerializer
         return JobSerializer
 
+    @transaction.atomic
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        # Idempotency check: get existing job or create a new one scoped to this user
-        job, created = Job.objects.get_or_create(
-            type=serializer.validated_data['type'],
-            idempotency_key=serializer.validated_data['idempotency_key'],
-            user=self.request.user,
-            defaults=serializer.validated_data
-        )
+        user = self.request.user
+        
+        # Atomic idempotency: select_for_update on potential existing job
+        try:
+            with transaction.atomic():
+                job = Job.objects.select_for_update().select_related('user').get(
+                    user=user,
+                    type=serializer.validated_data['type'],
+                    idempotency_key=serializer.validated_data['idempotency_key']
+                )
+                created = False
+        except Job.DoesNotExist:
+            validated_data = serializer.validated_data.copy()
+            validated_data['user'] = user
+            job = Job.objects.create(**validated_data)
+            created = True
+            job.refresh_from_db()  # Ensure fresh object
+        
         if created:
-            job.status = "QUEUED"
+            job.status = JobStatus.QUEUED
             job.save(update_fields=["status"])
             
-            queue = "default"
-
-            if job.priority >= 8:
+            # Improved queue routing
+            if job.priority >= 7:
                 queue = "high"
-            elif job.priority <= 2:
+            elif job.priority <= 3:
                 queue = "low"
-
+            else:
+                queue = "default"
+            
             execute_job.apply_async(args=[str(job.id)], queue=queue)
-        # Return existing job as-is for idempotent requests
+        
         response_serializer = JobSerializer(job)
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        return Response(
+            response_serializer.data, 
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        )
 
 class JobDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = JobSerializer

@@ -31,6 +31,12 @@ class Job(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["priority"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["idempotency_key"]),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=['user', 'type', 'idempotency_key'], 
