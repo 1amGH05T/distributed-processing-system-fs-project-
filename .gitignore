@@ -39,3 +39,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Django DB
+backend/db.sqlite3
+backend/API/migrations/0*
