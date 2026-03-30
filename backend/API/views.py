@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth.models import User
 from django.db import transaction
-from .models import Job
+from .models import Job, JobStatus
 from .tasks import execute_job
 from .serializers import JobSerializer, CreateJobSerializer, RegisterSerializer, UserSerializer
 
@@ -38,40 +38,39 @@ class JobListCreateView(generics.ListCreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = self.request.user
-        
-        # Atomic idempotency: select_for_update on potential existing job
-        try:
-            with transaction.atomic():
-                job = Job.objects.select_for_update().select_related('user').get(
-                    user=user,
-                    type=serializer.validated_data['type'],
-                    idempotency_key=serializer.validated_data['idempotency_key']
-                )
-                created = False
-        except Job.DoesNotExist:
-            validated_data = serializer.validated_data.copy()
-            validated_data['user'] = user
-            job = Job.objects.create(**validated_data)
-            created = True
-            job.refresh_from_db()  # Ensure fresh object
-        
+        validated_data = serializer.validated_data.copy()
+
+        # Atomically find or create — the DB UniqueConstraint on
+        # (user, type, idempotency_key) is the real guard.
+        # select_for_update locks the row so concurrent requests wait.
+        defaults = {k: v for k, v in validated_data.items()
+                    if k not in ('type', 'idempotency_key')}
+        defaults['user'] = user
+
+        job, created = Job.objects.select_for_update().get_or_create(
+            user=user,
+            type=validated_data['type'],
+            idempotency_key=validated_data['idempotency_key'],
+            defaults=defaults,
+        )
+
         if created:
             job.status = JobStatus.QUEUED
             job.save(update_fields=["status"])
-            
-            # Improved queue routing
+
+            # Queue routing by priority
             if job.priority >= 7:
                 queue = "high"
             elif job.priority <= 3:
                 queue = "low"
             else:
                 queue = "default"
-            
+
             execute_job.apply_async(args=[str(job.id)], queue=queue)
-        
+
         response_serializer = JobSerializer(job)
         return Response(
-            response_serializer.data, 
+            response_serializer.data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK
         )
 
@@ -91,9 +90,21 @@ class UserListView(generics.ListAPIView):
     permission_classes = [IsAdminUser]
 
 class UserDetailView(generics.RetrieveDestroyAPIView):
-    queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
+
+    def get_queryset(self):
+        return User.objects.all()
+
+    def destroy(self, request, *args, **kwargs):
+        # SEC-7: Prevent an admin from deleting their own account
+        instance = self.get_object()
+        if instance == request.user:
+            return Response(
+                {"detail": "You cannot delete your own account."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
 
 class CheckAdminView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]

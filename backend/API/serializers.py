@@ -11,12 +11,23 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'password']
-        extra_kwargs = {'password': {'write_only': True}, 'username': {'required': True}}
+        extra_kwargs = {
+            'password': {'write_only': True},
+            'username': {'required': True},
+            'email': {'required': True},
+        }
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
             raise serializers.ValidationError('Username already taken.')
         return value
+
+    def validate_email(self, value):
+        if not value:
+            raise serializers.ValidationError('Email is required.')
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError('An account with this email already exists.')
+        return value.lower()
 
     def create(self, validated_data):
         user = User.objects.create_user(
@@ -25,6 +36,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             password=validated_data['password']
         )
         return user
+
 
 class JobSerializer(serializers.ModelSerializer):
     username = serializers.ReadOnlyField(source='user.username')

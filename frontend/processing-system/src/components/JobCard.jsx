@@ -26,7 +26,8 @@ const JobCard = ({ job }) => {
                     badgeClass: 'status-running', 
                     icon: <span className="pulse-dot bg-green-400"></span>, 
                     text: status,
-                    worker: `worker-${Math.floor(Math.random() * 10) + 1}`,
+                    // DESIGN-9: use job UUID chars for a stable (non-random) simulated worker ID
+                    worker: `worker-${(parseInt(job.id.replace(/-/g, '').slice(-4), 16) % 10) + 1}`,
                     workerStatus: 'Processing',
                     actionIcon: <Eye className="w-3.5 h-3.5" />
                 };

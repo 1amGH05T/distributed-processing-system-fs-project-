@@ -8,7 +8,7 @@ const statusClass = (status) => {
         CREATED: 'status-created',
         RUNNING: 'status-running',
         COMPLETED: 'status-completed',
-        FAILED: 'status-failed',
+        // DESIGN-2: 'FAILED' is not a real status — backend uses 'DEAD'
         DEAD: 'status-dead',
         RETRY: 'status-retry',
     };

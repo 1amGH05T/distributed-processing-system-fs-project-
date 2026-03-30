@@ -1,3 +1,4 @@
+import axios from 'axios';
 // NOTE: For stronger XSS protection, consider migrating to HttpOnly cookies
 // instead of localStorage for token storage in a production environment.
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -8,6 +9,48 @@ const getAuthHeaders = () => {
         'Content-Type': 'application/json',
         ...(token ? { 'Authorization': `Bearer ${token}` } : {})
     };
+};
+
+// BUG-6: Attempt a silent token refresh. Returns true if successful.
+const tryRefreshToken = async () => {
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh) return false;
+    try {
+        const res = await fetch(`${BASE_URL}/auth/token/refresh/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh }),
+        });
+        if (!res.ok) return false;
+        let data;
+        try{
+            data = await res.json();
+        }catch{
+            return false
+        }
+        localStorage.setItem('access_token', data.access);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+// BUG-6: Centralized request helper — retries once after token refresh on 401.
+const apiRequest = async (url, options = {}, retry = true) => {
+    let response = await fetch(url, { ...options, headers: getAuthHeaders() });
+
+    if (response.status === 401 && retry) {
+        const refreshed = await tryRefreshToken();
+
+        if (refreshed) {
+            return apiRequest(url, options, false);
+        }
+
+        logout();
+        throw new Error('Session expired. Please log in again.');
+    }
+
+    return response;
 };
 
 export const login = async (username, password) => {
@@ -52,31 +95,37 @@ export const registerUser = async (username, email, password) => {
 };
 
 export const fetchJobs = async () => {
-    const response = await fetch(`${BASE_URL}/jobs`, {
-        headers: getAuthHeaders()
-    });
-    if (response.status === 401) {
-        localStorage.removeItem('access_token');
-        window.location.href = '/login'; // Quick redirect hack
-    }
+    const response = await apiRequest(`${BASE_URL}/jobs`);
     if (!response.ok) throw new Error('Failed to fetch jobs');
-    return response.json();
+    const data = await response.json();
+    // DESIGN-4: DRF pagination returns { count, next, previous, results: [...] }
+    return Array.isArray(data) ? data : (data.results ?? []);
 };
 
 export const createJob = async (jobData) => {
-    const response = await fetch(`${BASE_URL}/jobs`, {
+    const response = await apiRequest(`${BASE_URL}/jobs`, {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify(jobData),
     });
-    if (!response.ok) throw new Error('Failed to create job');
+    if (!response.ok) {
+        let errorMessage = 'Failed to create job';
+        try {
+            const data = await response.json();
+            if (data.detail) errorMessage = data.detail;
+            else if (data.non_field_errors) errorMessage = data.non_field_errors[0];
+            else {
+                const firstKey = Object.keys(data)[0];
+                if (firstKey) errorMessage = `${firstKey}: ${data[firstKey]}`;
+            }
+        } catch (e) { }
+        throw new Error(errorMessage);
+    }
     return response.json();
 };
 
 export const deleteJob = async (id) => {
-    const response = await fetch(`${BASE_URL}/jobs/${id}`, {
+    const response = await apiRequest(`${BASE_URL}/jobs/${id}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to delete job');
     // 204 No Content typically doesn't return JSON
@@ -84,26 +133,22 @@ export const deleteJob = async (id) => {
 };
 
 export const fetchUsers = async () => {
-    const response = await fetch(`${BASE_URL}/users`, {
-        headers: getAuthHeaders()
-    });
+    const response = await apiRequest(`${BASE_URL}/users`);
     if (!response.ok) throw new Error('Failed to fetch users');
-    return response.json();
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.results ?? []);
 };
 
 export const deleteUser = async (id) => {
-    const response = await fetch(`${BASE_URL}/users/${id}`, {
+    const response = await apiRequest(`${BASE_URL}/users/${id}`, {
         method: 'DELETE',
-        headers: getAuthHeaders(),
     });
     if (!response.ok) throw new Error('Failed to delete user');
     return true;
 };
 
 export const checkAdmin = async () => {
-    const response = await fetch(`${BASE_URL}/auth/check-admin`, {
-        headers: getAuthHeaders()
-    });
+    const response = await apiRequest(`${BASE_URL}/auth/check-admin`);
     if (!response.ok) throw new Error('Failed to check admin status');
     return response.json();
 };

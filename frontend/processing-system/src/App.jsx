@@ -177,14 +177,16 @@ const JobDashboard = () => {
       await createJob(jobData);
       loadJobs();
     } catch (err) {
-      alert("Error creating job: " + err.message);
+      // DESIGN-13: Use in-UI error state instead of blocking alert()
+      setError('Error creating job: ' + err.message);
     }
   };
 
   const filteredJobs = jobs.filter(job => {
     if (filter === 'All') return true;
     if (filter === 'Completed') return job.status === 'COMPLETED';
-    if (filter === 'Failed') return job.status === 'DEAD' || job.status === 'FAILED';
+    // DESIGN-2: backend uses 'DEAD' not 'FAILED' — fixed phantom status
+    if (filter === 'Failed') return job.status === 'DEAD' || job.status === 'RETRY';
     return true;
   });
 
@@ -338,9 +340,21 @@ const JobDashboard = () => {
 };
 
 // Protect routes that require login
-const PrivateRoute = ({ children }) => {
+// DESIGN-12: Also check JWT expiry, not just string existence
+const isTokenValid = () => {
   const token = localStorage.getItem('access_token');
-  return token ? children : <Navigate to="/login" replace />;
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    // exp is in seconds; Date.now() is in ms
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+};
+
+const PrivateRoute = ({ children }) => {
+  return isTokenValid() ? children : <Navigate to="/login" replace />;
 };
 
 const AdminRoute = ({ children }) => {
