@@ -33,9 +33,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', 'False') == 'True'
+DEBUG = False
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='.onrender.com', cast=lambda v: [s.strip() for s in v.split(',')])
+ALLOWED_HOSTS = ['https://distributed-processing-system-fs-project.onrender.com']
 
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = config(
@@ -124,14 +124,7 @@ WSGI_APPLICATION = 'main.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 DATABASES = {
-    'default': dj_database_url.config(
-        default=config(
-            'DATABASE_URL',
-            default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
-        ),
-        conn_max_age=600,
-        conn_health_checks=True
-    )
+    'default':dj_database_url.config(default="sqlite://db.sqlite3")
 }
 
 
