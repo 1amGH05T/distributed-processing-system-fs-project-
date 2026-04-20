@@ -1,6 +1,6 @@
-import axios from 'axios';
 // NOTE: For stronger XSS protection, consider migrating to HttpOnly cookies
 // instead of localStorage for token storage in a production environment.
+import axios from 'axios';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const getAuthHeaders = () => {
