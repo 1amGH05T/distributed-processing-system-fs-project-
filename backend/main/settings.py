@@ -40,16 +40,17 @@ ALLOWED_HOSTS = ["*"]
 CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173',
+    default='http://localhost:5173,https://distributed-processing-system-fs-pr.vercel.app',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
 
 # SEC-8: Trusted origins for CSRF (required when DEBUG=False)
 CSRF_TRUSTED_ORIGINS = config(
     'CSRF_TRUSTED_ORIGINS',
-    default='http://localhost:5173',
+    default='http://localhost:5173,https://distributed-processing-system-fs-pr.vercel.app',
     cast=lambda v: [s.strip() for s in v.split(',')]
 )
+
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
