@@ -47,13 +47,36 @@ class JobSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'status', 'attempts', 'user', 'username', 'created_at', 'updated_at']
 
 class CreateJobSerializer(serializers.ModelSerializer):
+    type = serializers.CharField(required=True, allow_blank=False)
     priority = serializers.IntegerField(required=False, default=0)
     timeout_ms = serializers.IntegerField(required=False, default=10000)
     max_attempts = serializers.IntegerField(required=False, default=3)
     payload = serializers.JSONField(required=False, default=dict)
-    
+    idempotency_key = serializers.CharField(required=True, allow_blank=False)
+
     class Meta:
         model = Job
         fields = ['type', 'payload', 'priority', 'timeout_ms', 'max_attempts', 'idempotency_key']
 
+    def validate_type(self, value):
+        value = (value or '').strip()
+        if not value:
+            raise serializers.ValidationError('Job type is required.')
+        return value
+
+    def validate_payload(self, value):
+        # Ensure DRF always gives us a dict/object (not list/string)
+        if value is None:
+            return {}
+        if not isinstance(value, (dict, list)):
+            raise serializers.ValidationError('Payload must be a JSON object.')
+        return value
+
+    def validate_idempotency_key(self, value):
+        value = (value or '').strip()
+        if not value:
+            raise serializers.ValidationError('Idempotency key cannot be blank.')
+        return value
+
     # Idempotency now handled atomically in view
+

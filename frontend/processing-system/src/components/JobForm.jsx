@@ -6,10 +6,12 @@ const JobForm = ({ onSubmit }) => {
         type: '',
         payload: '{}',
         priority: 0,
+        timeout_ms: 10000,
         max_attempts: 3,
         idempotency_key: ''
     });
     const [isOpen, setIsOpen] = useState(true);
+    const [inlineError, setInlineError] = useState('');
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -18,23 +20,57 @@ const JobForm = ({ onSubmit }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        try {
-            const parsedPayload = JSON.parse(formData.payload);
-            onSubmit({
-                ...formData,
-                payload: parsedPayload,
-                priority: parseInt(formData.priority, 10),
-                max_attempts: parseInt(formData.max_attempts, 10)
-            });
-            // Reset form
-            setFormData({ type: '', payload: '{}', priority: 0, max_attempts: 3, idempotency_key: '' });
-        } catch {
-            alert('Invalid JSON payload. Please check your formatting.');
+        setInlineError('');
+
+        const idk = (formData.idempotency_key || '').trim();
+        if (!idk) {
+            setInlineError('Idempotency Key cannot be blank.');
+            return;
         }
+
+        const type = (formData.type || '').trim();
+        if (!type) {
+            setInlineError('Job Type is required.');
+            return;
+        }
+
+        let parsedPayload;
+        try {
+            parsedPayload = JSON.parse(formData.payload);
+        } catch {
+            setInlineError('Invalid JSON payload. Please check your formatting.');
+            return;
+        }
+
+        onSubmit({
+            ...formData,
+            type,
+            payload: parsedPayload,
+            priority: parseInt(formData.priority, 10),
+            timeout_ms: parseInt(formData.timeout_ms, 10),
+            max_attempts: parseInt(formData.max_attempts, 10),
+            idempotency_key: idk,
+        });
+
+        // Reset form
+        setFormData({
+            type: '',
+            payload: '{}',
+            priority: 0,
+            timeout_ms: 10000,
+            max_attempts: 3,
+            idempotency_key: ''
+        });
     };
 
     return (
         <div className="glass-panel overflow-hidden">
+            {inlineError && (
+                <div className="mb-4 bg-red-500/20 border border-red-500/50 text-red-300 p-3 rounded-lg text-sm">
+                    {inlineError}
+                </div>
+            )}
+
             {/* Collapsible Header */}
             <button
                 type="button"
@@ -61,7 +97,9 @@ const JobForm = ({ onSubmit }) => {
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Job Type <span className="text-red-400">*</span></label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                                    Job Type <span className="text-red-400">*</span>
+                                </label>
                                 <input
                                     type="text"
                                     name="type"
@@ -72,8 +110,11 @@ const JobForm = ({ onSubmit }) => {
                                     className="input-field"
                                 />
                             </div>
+
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Idempotency Key <span className="text-red-400">*</span></label>
+                                <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                                    Idempotency Key <span className="text-red-400">*</span>
+                                </label>
                                 <input
                                     type="text"
                                     name="idempotency_key"
@@ -84,6 +125,7 @@ const JobForm = ({ onSubmit }) => {
                                     className="input-field"
                                 />
                             </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-1.5">Priority</label>
                                 <input
@@ -97,6 +139,7 @@ const JobForm = ({ onSubmit }) => {
                                 />
                                 <p className="text-xs text-slate-500 mt-1">Higher = processed first (0–10)</p>
                             </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-1.5">Max Attempts</label>
                                 <input
@@ -110,10 +153,27 @@ const JobForm = ({ onSubmit }) => {
                                 />
                                 <p className="text-xs text-slate-500 mt-1">Retry limit on failure</p>
                             </div>
+
+                            {/* timeout_ms is supported by the backend serializer/model */}
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-slate-300 mb-1.5">Timeout (ms)</label>
+                                <input
+                                    type="number"
+                                    name="timeout_ms"
+                                    min="1"
+                                    max="600000"
+                                    value={formData.timeout_ms}
+                                    onChange={handleChange}
+                                    className="input-field"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">How long the job may run before timing out (backend uses {formData.timeout_ms}ms default)</p>
+                            </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1.5">Payload <span className="text-slate-500 font-normal">(JSON)</span></label>
+                            <label className="block text-sm font-medium text-slate-300 mb-1.5">
+                                Payload <span className="text-slate-500 font-normal">(JSON)</span>
+                            </label>
                             <textarea
                                 name="payload"
                                 rows={4}
@@ -139,3 +199,4 @@ const JobForm = ({ onSubmit }) => {
 };
 
 export default JobForm;
+
