@@ -3,6 +3,8 @@
 import axios from 'axios';
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+const API_PREFIX = '/api';
+
 const getAuthHeaders = () => {
     const token = localStorage.getItem('access_token');
     return {
@@ -16,7 +18,7 @@ const tryRefreshToken = async () => {
     const refresh = localStorage.getItem('refresh_token');
     if (!refresh) return false;
     try {
-        const res = await fetch(`${BASE_URL}/auth/token/refresh/`, {
+        const res = await fetch(`${BASE_URL}${API_PREFIX}/auth/token/refresh/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ refresh }),
@@ -54,7 +56,7 @@ const apiRequest = async (url, options = {}, retry = true) => {
 };
 
 export const login = async (username, password) => {
-    const response = await fetch(`${BASE_URL}/auth/login`, {
+    const response = await fetch(`${BASE_URL}${API_PREFIX}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -74,7 +76,7 @@ export const login = async (username, password) => {
 };
 
 export const registerUser = async (username, email, password) => {
-    const response = await fetch(`${BASE_URL}/auth/register`, {
+    const response = await fetch(`${BASE_URL}${API_PREFIX}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, email, password })
@@ -95,7 +97,7 @@ export const registerUser = async (username, email, password) => {
 };
 
 export const fetchJobs = async () => {
-    const response = await apiRequest(`${BASE_URL}/jobs`);
+    const response = await apiRequest(`${BASE_URL}${API_PREFIX}/jobs`);
     if (!response.ok) throw new Error('Failed to fetch jobs');
     const data = await response.json();
     // DESIGN-4: DRF pagination returns { count, next, previous, results: [...] }
@@ -103,7 +105,7 @@ export const fetchJobs = async () => {
 };
 
 export const createJob = async (jobData) => {
-    const response = await apiRequest(`${BASE_URL}/jobs`, {
+    const response = await apiRequest(`${BASE_URL}${API_PREFIX}/jobs`, {
         method: 'POST',
         body: JSON.stringify(jobData),
     });
@@ -124,7 +126,7 @@ export const createJob = async (jobData) => {
 };
 
 export const deleteJob = async (id) => {
-    const response = await apiRequest(`${BASE_URL}/jobs/${id}`, {
+    const response = await apiRequest(`${BASE_URL}${API_PREFIX}/jobs/${id}`, {
         method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete job');
@@ -133,14 +135,14 @@ export const deleteJob = async (id) => {
 };
 
 export const fetchUsers = async () => {
-    const response = await apiRequest(`${BASE_URL}/users`);
+    const response = await apiRequest(`${BASE_URL}${API_PREFIX}/users`);
     if (!response.ok) throw new Error('Failed to fetch users');
     const data = await response.json();
     return Array.isArray(data) ? data : (data.results ?? []);
 };
 
 export const deleteUser = async (id) => {
-    const response = await apiRequest(`${BASE_URL}/users/${id}`, {
+    const response = await apiRequest(`${BASE_URL}${API_PREFIX}/users/${id}`, {
         method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete user');
@@ -148,7 +150,7 @@ export const deleteUser = async (id) => {
 };
 
 export const checkAdmin = async () => {
-    const response = await apiRequest(`${BASE_URL}/auth/check-admin`);
+    const response = await apiRequest(`${BASE_URL}${API_PREFIX}/auth/check-admin`);
     if (!response.ok) throw new Error('Failed to check admin status');
     return response.json();
 };

@@ -7,6 +7,9 @@ from django.db import transaction
 from .models import Job, JobStatus
 from .tasks import execute_job
 from .serializers import JobSerializer, CreateJobSerializer, RegisterSerializer, UserSerializer
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
@@ -66,7 +69,10 @@ class JobListCreateView(generics.ListCreateAPIView):
             else:
                 queue = "default"
 
-            execute_job.apply_async(args=[str(job.id)], queue=queue)
+            try:
+                execute_job.apply_async(args=[str(job.id)], queue=queue)
+            except Exception:
+                logger.warning("Redis not available — job created but not queued")
 
         response_serializer = JobSerializer(job)
         return Response(
